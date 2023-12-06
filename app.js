@@ -1,8 +1,11 @@
 const express = require("express");
 const multer = require("multer");
 const mongoose = require("mongoose");
-const imageModel = require("./image.model");
+const Image = require("./image.model");
+const fs = require("fs");
+const path = require("path");
 const app = express();
+const CryptoJS = require("crypto-js");
 
 //DB connect
 mongoose
@@ -28,6 +31,7 @@ app.post("/upload", upload.single("file"), (req, res) => {
   if (!req.file) {
     return res.status(400).send("No file uploaded.");
   }
+  console.log("-file-", req.file);
   const newImage = new imageModel({
     name: req.body.name,
     image: req.file.filename,
@@ -37,6 +41,51 @@ app.post("/upload", upload.single("file"), (req, res) => {
 
   // console.log('---newImage--',newImage)
   res.send("File uploaded successfully.");
+});
+app.put("/update/:id", upload.single("image"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    // Check if the image exists
+    const existingImage = await Image.findById(id);
+    if (!existingImage) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+  
+    // Update only if a new image is provided
+    if (req.file) {
+      // Calculate checksums of the existing and new images
+      const existingImageChecksum = CryptoJS.MD5(
+        existingImage.image
+      ).toString();
+      const newImageChecksum = CryptoJS.MD5(req.file.filename).toString();
+
+      // Check if the images are different
+      if (existingImageChecksum !== newImageChecksum) {
+        // Remove existing image
+        if (existingImage.image) {
+          const imagePath = path.join(__dirname,"uploads/", existingImage.image);
+          fs.unlinkSync(imagePath);
+        }
+
+        // Update with the new image
+        existingImage.image = req.file.filename;
+      }
+      else{
+        res.json({ message: "image exist" });
+      }
+    }
+
+    // Update other fields
+    existingImage.name = name;
+    await existingImage.save();
+
+    res.json({ message: "updated successfully", image: existingImage });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 app.listen(3000, () => {
