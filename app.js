@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const mongoose = require("mongoose");
-const Image = require("./image.model");
+const imageModel = require("./image.model");
 const fs = require("fs");
 const path = require("path");
 const app = express();
@@ -49,11 +49,11 @@ app.put("/update/:id", upload.single("image"), async (req, res) => {
 
     // Check if the image exists
     const existingImage = await Image.findById(id);
+    console.log(existingImage.image)
     if (!existingImage) {
       return res.status(404).json({ message: "Image not found" });
     }
 
-  
     // Update only if a new image is provided
     if (req.file) {
       // Calculate checksums of the existing and new images
@@ -66,14 +66,17 @@ app.put("/update/:id", upload.single("image"), async (req, res) => {
       if (existingImageChecksum !== newImageChecksum) {
         // Remove existing image
         if (existingImage.image) {
-          const imagePath = path.join(__dirname,"uploads/", existingImage.image);
+          const imagePath = path.join(
+            __dirname,
+            "uploads/",
+            existingImage.image
+          );
           fs.unlinkSync(imagePath);
         }
 
         // Update with the new image
         existingImage.image = req.file.filename;
-      }
-      else{
+      } else {
         res.json({ message: "image exist" });
       }
     }
@@ -86,6 +89,46 @@ app.put("/update/:id", upload.single("image"), async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+app.post("/uploadImages", upload.array("files", 10), (req, res) => {
+  // Access the uploaded files information in req.files
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).send("No files uploaded.");
+  }
+
+  const uploadedImages = req.files.map((file) => ({
+    name: req.body.name,
+    image: file.filename,
+  }));
+
+  imageModel
+    .insertMany(uploadedImages)
+    .then(() => {
+      res.send("Files Are uploaded successfully.");
+    })
+    .catch((err) => {
+      console.log(err);
+      res.status(500).send("An error occurred while uploading files.");
+    });
+});
+app.delete("/delete/:id",async (req, res) => {
+  // Get the image ID from the request params
+  const id = req.params.id;
+
+  // Find the image in the database
+  const existingImage = await Image.findById(id);
+  // console.log(image);
+
+  // Delete the image file from the database
+  await imageModel.deleteOne({_id:id})
+ 
+ 
+  const deleteimage = existingImage.image
+  // Delete the image file from the folder
+  fs.unlinkSync(`./uploads/${deleteimage}`);
+
+  // Respond to the client
+  res.send("Image deleted successfully!");
 });
 
 app.listen(3000, () => {
